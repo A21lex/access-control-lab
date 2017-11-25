@@ -8,12 +8,9 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
-import java.util.Scanner;
-import java.util.UUID;
+import java.util.*;
 
 public class PrinterServant extends UnicastRemoteObject implements PrinterService {
-
 
     private String currentUser; // stores user currently logged in
 
@@ -123,6 +120,7 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
     }
 
     /**
+     * ACL task
      * Checks whether method execution is allowed by acl
      *
      * @param methodName The name of the method which is being invoked
@@ -133,32 +131,109 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
         Scanner sc = new Scanner(new FileReader("acl"));
         String patternUsername = ":";
         String patternMethodName = ";";
-        String[] arr = null;
+        String[] arr;
         sc.useDelimiter(patternUsername);
         while (sc.hasNext()) {
             String s = sc.nextLine();
             arr = s.split(patternUsername);
-            //PRINT ARRAY OF USER PERMISSIONS FOR DEBUGGING PURPOSES
-            System.out.println("PRINT ARRAY 1");
-            for (int i = 0; i < arr.length; i++) {
-                System.out.println(arr[i]);
-            }
+//            //PRINT ARRAY OF USER PERMISSIONS FOR DEBUGGING PURPOSES
+//            System.out.println("PRINT ARRAY 1");
+//            for (int i = 0; i < arr.length; i++) {
+//                System.out.println(arr[i]);
+//            }
             if (arr[0].equals(username)) {
                 // Check for "all" permission - allows every system action
                 if (arr[1].equals("all")) {
                     return true;
                 }
-                sc.useDelimiter(patternMethodName); // change delimiter to ; to go through permissions
                 arr = arr[1].split(patternMethodName); // arr[1] here is the list of permissions for current user
-                System.out.println("PRINT ARRAY 2");
-                //PRINT ARRAY OF PERMISSION FOR DEBUGGING PURPOSES
-                for (int i = 0; i < arr.length; i++) {
-                    System.out.println(arr[i]);
-                }
+//                System.out.println("PRINT ARRAY 2");
+//                //PRINT ARRAY OF PERMISSION FOR DEBUGGING PURPOSES
+//                for (int i = 0; i < arr.length; i++) {
+//                    System.out.println(arr[i]);
+//                }
                 return Arrays.asList(arr).contains(methodName); //return true if it contains needed permission
             }
         }
         return false;
+    }
+
+    // THE FOLLOWING CODE CONTAINS RBAC IMPLEMENTATION METHODS
+
+    // Get which role the user belongs to
+    private String getRole(String username) throws FileNotFoundException {
+        String role = null;
+        Scanner roleScanner = new Scanner(new FileReader("RBAC/UserRoles")); // let's start by figuring out user's role
+        String pattern = ":";
+        String[] arr;
+        roleScanner.useDelimiter(pattern);
+        while (roleScanner.hasNext()) {
+            String s = roleScanner.nextLine();
+            arr = s.split(pattern);
+            if (arr[0].equals(username)) {
+                return arr[1];
+            }
+        }
+        return "Error. Could not get role for the user.";
+    }
+
+    // Get which permissions role has
+    private ArrayList<String> getPermissionsRBAC(String role) throws FileNotFoundException {
+        //Now need to figure out whether this role has the permission to perform the method which is being invoked
+        ArrayList<String> permissionList = new ArrayList<>();
+        ArrayList<String> rolesToFetchPermissionsFrom = new ArrayList<>();
+        ArrayList<String> fullList = new ArrayList<>();
+        String[] arr;
+        Scanner sc2 = new Scanner(new FileReader("RBAC/RolesPermission"));
+        String patternUsername = ":";
+        String patternMethodName = ";";
+        String patternInheritedName = "+";
+        sc2.useDelimiter(patternUsername);
+        while (sc2.hasNext()) {
+            String s = sc2.nextLine();
+            arr = s.split(patternUsername);
+            if (arr[0].equals(role)) {
+                arr = arr[1].split(patternMethodName); // this is preliminary list of methods allowed
+                for (String string : arr) { //for every potential method
+                    System.out.println("Checking string " + string);
+                    if (!string.startsWith("+")) { // check if not a inheritance
+                        System.out.println(string + " does not start with +. Adding to permission list.");
+                        permissionList.add(string); // then add to permission list
+                    } else {
+                        System.out.println("Adding " + string.substring(1) + " to the list of fetchpermissions");
+                        rolesToFetchPermissionsFrom.add(string.substring(1)); // else add to fetchpermissions list
+                    }
+                }
+                System.out.println("PERMISSION LIST NOW: " + permissionList);
+                fullList.addAll(permissionList); // add permissions gathered so far
+                System.out.println("CHECK LIST NOW: " + rolesToFetchPermissionsFrom);
+                for (String roleToCheck : rolesToFetchPermissionsFrom) { // recursively fetch permissions from other roles
+                    // concatenate current permission list with the permission lists we obtain next
+                    System.out.println("Getting permissions of: " + roleToCheck);
+                    //fullList = new ArrayList<>(permissionList);
+                    System.out.println("fullList = " + fullList);
+                    fullList.addAll(getPermissionsRBAC(roleToCheck.replaceFirst("^+", ""))); // matches leading +
+                    System.out.println("fullList = " + fullList);
+                }
+            }
+        }
+        return fullList;
+    }
+
+    /**
+     *
+     * Checks whether method execution is allowed by RBAC
+     *
+     * @param methodName The name of the method which is being invoked
+     * @param username   The name of the user trying to invoke a method
+     * @return True for allowed, False for forbidden
+     */
+    private boolean isAllowedRBAC(String methodName, String username) throws FileNotFoundException {
+        String role = getRole(username); // get role of the user
+        System.out.println("Role of " + username + " is " + role);
+        ArrayList<String> permissions = getPermissionsRBAC(role); // get permissions of that role
+        System.out.println("Her permissions = " + permissions);
+        return permissions.contains(methodName); // if list for the role contains needed permission, return true
     }
 
     @Override
@@ -169,7 +244,7 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
     @Override
     public String authenticate(String password, String username) throws IOException,
             NoSuchAlgorithmException {
-        currentUser = username; // remember the username of the currently logged in user
+        currentUser = username; // remember the username of the currently (allegedly) logged in user
         System.out.println("Attempting to log in user with presumed login: " + currentUser);
 
         // 1. Get the user's salt/hash from the database
@@ -203,18 +278,20 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
 
     @Override
     public String print(String token, String filename, String printer) throws RemoteException, FileNotFoundException {
-        // Get the name of the method currently being executed
-        class Local {}
-        String methodName = Local.class.getEnclosingMethod().getName();
-        System.out.println(methodName + " <<<METHOD NAME"); // just debug
-        // Check whether method execution is allowed for the current user
-        if (!isAllowed(methodName, currentUser)) {
-            return "ACL gives no permission to use this method for user " + currentUser + ". Printer will not start";
-        }
-
+        // Check if authorization token exists
         if (!tokenExists(token)) {
             return "No token detected. Printer will not start.";
         }
+        // Get the name of the method currently being executed
+        class Local {
+        }
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check whether method execution is allowed for the current user
+        if (!isAllowedRBAC(methodName, currentUser)) {
+            return "ACL gives no permission to use this method for user " + currentUser + ". Printer will not start";
+        }
+
         return "print successfully invoked, token " + token + " exists and permission is given.";
     }
 
