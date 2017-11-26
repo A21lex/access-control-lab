@@ -30,16 +30,6 @@ public class Client {
     static String IdaLg = "Ida";
     static String IdaPw = "ida123";
 
-
-
-    public static String getHexStringFromBytes(byte[] arrayOfBytes) {
-        StringBuffer stringBuffer = new StringBuffer();
-        for (int i = 0; i < arrayOfBytes.length; i++) {
-            stringBuffer.append(Integer.toString((arrayOfBytes[i] & 0xff) + 0x100, 16).substring(1));
-        }
-        return stringBuffer.toString();
-    }
-
     public static void main(String[] args) throws IOException, NotBoundException, NoSuchAlgorithmException {
         //checking the object reference by the name
         // ..some debugging here
