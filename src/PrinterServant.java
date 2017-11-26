@@ -14,6 +14,10 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
 
     private String currentUser; // stores user currently logged in
 
+    /* Set this to true for using RBAC, false for using ACL*/
+    private boolean useRBAC = true;
+
+
     protected PrinterServant() throws RemoteException {
         super();
     }
@@ -127,7 +131,7 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
      * @param username   The name of the user trying to invoke a method
      * @return True for allowed, False for forbidden
      */
-    private boolean isAllowed(String methodName, String username) throws FileNotFoundException {
+    private boolean isAllowedACL(String methodName, String username) throws FileNotFoundException {
         Scanner sc = new Scanner(new FileReader("acl"));
         String patternUsername = ":";
         String patternMethodName = ";";
@@ -179,15 +183,13 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
 
     // Get which permissions role has
     private ArrayList<String> getPermissionsRBAC(String role) throws FileNotFoundException {
-        //Now need to figure out whether this role has the permission to perform the method which is being invoked
-        ArrayList<String> permissionList = new ArrayList<>();
-        ArrayList<String> rolesToFetchPermissionsFrom = new ArrayList<>();
-        ArrayList<String> fullList = new ArrayList<>();
+        ArrayList<String> permissionList = new ArrayList<>(); // list of gathered permissions
+        ArrayList<String> rolesToFetchPermissionsFrom = new ArrayList<>(); // list of roles current role inherits from
+        ArrayList<String> fullList = new ArrayList<>(); // full list of permissions returned by the method
         String[] arr;
         Scanner sc2 = new Scanner(new FileReader("RBAC/RolesPermission"));
         String patternUsername = ":";
         String patternMethodName = ";";
-        String patternInheritedName = "+";
         sc2.useDelimiter(patternUsername);
         while (sc2.hasNext()) {
             String s = sc2.nextLine();
@@ -195,23 +197,19 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
             if (arr[0].equals(role)) {
                 arr = arr[1].split(patternMethodName); // this is preliminary list of methods allowed
                 for (String string : arr) { //for every potential method
-                    System.out.println("Checking string " + string);
                     if (!string.startsWith("+")) { // check if not a inheritance
-                        System.out.println(string + " does not start with +. Adding to permission list.");
+                        //System.out.println(string + " does not start with +. Adding to permission list.");
                         permissionList.add(string); // then add to permission list
                     } else {
-                        System.out.println("Adding " + string.substring(1) + " to the list of fetchpermissions");
+                        //System.out.println("Adding " + string.substring(1) + " to the list of fetchpermissions");
                         rolesToFetchPermissionsFrom.add(string.substring(1)); // else add to fetchpermissions list
                     }
                 }
-                System.out.println("PERMISSION LIST NOW: " + permissionList);
                 fullList.addAll(permissionList); // add permissions gathered so far
-                System.out.println("CHECK LIST NOW: " + rolesToFetchPermissionsFrom);
                 for (String roleToCheck : rolesToFetchPermissionsFrom) { // recursively fetch permissions from other roles
                     // concatenate current permission list with the permission lists we obtain next
                     System.out.println("Getting permissions of: " + roleToCheck);
-                    //fullList = new ArrayList<>(permissionList);
-                    System.out.println("fullList = " + fullList);
+                    //System.out.println("fullList = " + fullList);
                     fullList.addAll(getPermissionsRBAC(roleToCheck.replaceFirst("^+", ""))); // matches leading +
                     System.out.println("fullList = " + fullList);
                 }
@@ -221,7 +219,6 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
     }
 
     /**
-     *
      * Checks whether method execution is allowed by RBAC
      *
      * @param methodName The name of the method which is being invoked
@@ -278,84 +275,264 @@ public class PrinterServant extends UnicastRemoteObject implements PrinterServic
 
     @Override
     public String print(String token, String filename, String printer) throws RemoteException, FileNotFoundException {
-        // Check if authorization token exists
-        if (!tokenExists(token)) {
-            return "No token detected. Printer will not start.";
-        }
         // Get the name of the method currently being executed
         class Local {
         }
         String methodName = Local.class.getEnclosingMethod().getName();
         System.out.println(methodName + " <<<METHOD NAME"); // just debug
-        // Check whether method execution is allowed for the current user
-        if (!isAllowedRBAC(methodName, currentUser)) {
-            return "ACL gives no permission to use this method for user " + currentUser + ". Printer will not start";
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
         }
-
-        return "print successfully invoked, token " + token + " exists and permission is given.";
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String queue(String token) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "queue successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Queue will not be invoked.";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String topQueue(String token, int job) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "topQueue successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. topQueue will not start";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String start(String token) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "start successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Printer will not start";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String stop(String token) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "stop successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Printer will not stop";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String restart(String token) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "restart successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Printer will not restart";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String status(String token) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "status successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Status will not start";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String readConfig(String token, String parameter) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "status successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. Status will not start";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 
     @Override
     public String setConfig(String token, String parameter, String value) throws RemoteException, FileNotFoundException {
-        if (tokenExists(token)) {
-            return "setConfig successfully invoked, token " + token + " exists";
+        // Get the name of the method currently being executed
+        // Get the name of the method currently being executed
+        class Local {
         }
-        return "No token detected. setConfig will not start";
+        String methodName = Local.class.getEnclosingMethod().getName();
+        System.out.println(methodName + " <<<METHOD NAME"); // just debug
+        // Check if authorization token exists
+        if (!tokenExists(token)) {
+            return "No token detected. " + methodName + " will not be invoked.";
+        }
+        // Check whether method execution is allowed for the current user.
+        // Figure out whether useRBAC is set to true and decide which access control method to use
+        if (useRBAC) {
+            System.out.println("Using RBAC for access control.");
+            if (!isAllowedRBAC(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        } else {
+            System.out.println("Using ACL for access control.");
+            if (!isAllowedACL(methodName, currentUser)) {
+                return "There is no permission to use this method for user " + currentUser +
+                        ". Method " + methodName + " will not be invoked";
+            }
+        }
+        return methodName + " successfully invoked, token " + token + " exists and permission is given.";
     }
 }

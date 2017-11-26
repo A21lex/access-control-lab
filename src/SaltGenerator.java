@@ -6,6 +6,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
+/**
+ * This class was used for salt generation
+ */
 public class SaltGenerator {
 
     static String CeciliaLg = "Cecilia";
@@ -21,6 +24,13 @@ public class SaltGenerator {
 
     static String GeorgeLg = "George";
     static String GeorgePw = "geo123";
+
+    // Users added after the changes
+    static String HenryLg = "Henry";
+    static String HenryPw = "henry123";
+
+    static String IdaLg = "Ida";
+    static String IdaPw = "ida123";
 
 
     public static String getHexStringFromBytes(byte[] arrayOfBytes) {
@@ -43,7 +53,7 @@ public class SaltGenerator {
         System.out.println("Randomly generated salt: " + generatedSalt);
 
 
-        String saltAndPassword = generatedSalt + GeorgePw; // put a password to get a salt for
+        String saltAndPassword = generatedSalt + IdaPw; // put a password to get a salt for
 
         byte saltAndPasswordBytes[] = saltAndPassword.getBytes();
         //do some hashing initialization and process the password
@@ -52,7 +62,7 @@ public class SaltGenerator {
         byte byteData[] = md.digest();
         //Convert byte to hex
         String passwordHash = getHexStringFromBytes(byteData);
-        System.out.println("Hash of Salt + password in bytes: " + passwordHash);
+        System.out.println("Hash of Salt|password in bytes: " + passwordHash);
 
     }
 

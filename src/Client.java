@@ -9,12 +9,11 @@ import java.security.NoSuchAlgorithmException;
 
 public class Client {
 
-    //a regular login and password stored by some client
-    //assume some server stores hashed password of every user (did it during user registration)
+    // a regular login and password stored by some client
+    // hardcoded to avoid typing it in for every test of the code
     static String AliceLg = "Alice";
     static String AlicePw = "ali123";
-    static String BobLg = "Bob";
-    static String BobPw = "boxy123";
+    // Bob was removed from the company, so also removed his credentials from this file
     static String CeciliaLg = "Cecilia";
     static String CeciliaPw = "ceci123";
     static String DavidLg = "David";
@@ -25,6 +24,11 @@ public class Client {
     static String FredPw = "fre123";
     static String GeorgeLg = "George";
     static String GeorgePw = "geo123";
+    // Users added after the changes
+    static String HenryLg = "Henry";
+    static String HenryPw = "henry123";
+    static String IdaLg = "Ida";
+    static String IdaPw = "ida123";
 
 
 
@@ -42,32 +46,11 @@ public class Client {
         PrinterService service = (PrinterService) Naming.lookup("rmi://localhost:5099/printer");
         System.out.println("--- " + service.echo("hey server, i am CLIENT"));
 
-        //THIS WOULD BE IMPLEMENTED FOR SALT GENERATION
-        // (and was used to generate salts for the users within this exercise)
-//
-//        SecureRandom random = new SecureRandom();
-//        byte saltBytes[] = new byte[64];
-//        // generate random 64 bytes
-//        random.nextBytes(saltBytes);
-//        String generatedSalt = getHexStringFromBytes(saltBytes);
-//        System.out.println("Randomly generated salt: " + generatedSalt);
-//
-//
-//        String saltAndPassword = generatedSalt + AlicePw;
-//
-//        byte saltAndPasswordBytes[] = saltAndPassword.getBytes();
-//        //do some hashing initialization and process the password
-//        MessageDigest md = MessageDigest.getInstance("SHA-512");
-//        md.update(saltAndPasswordBytes); // hash the salt+password
-//        byte byteData[] = md.digest();
-//        //Convert byte to hex
-//        String passwordHash = getHexStringFromBytes(byteData);
-//        System.out.println("Hash of Salt + password in bytes: " + passwordHash);
+        /* AUTHENTICATE SOME USER HERE BY INPUTTING PASSWORD AND LOGIN */
+        String token = service.authenticate(HenryPw, HenryLg);
+        System.out.println(token); // received authentication token
 
-        //String token = service.authenticate(AlicePw, AliceLg);
-        String token = service.authenticate(AlicePw, AliceLg);
-        System.out.println(token);
-
+        // Invoke some methods and get the results of the invocation
         String printerOutput = service.print(token, "testFile", "testPrinter");
         System.out.println(printerOutput);
 

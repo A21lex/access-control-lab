@@ -1,7 +1,8 @@
 Alice:Manager
-Bob:Technician
 Cecilia:PowerUser
 David:User
 Erica:User
 Fred:User
-George:User
+George:Technician
+Henry:User
+Ida:PowerUser
